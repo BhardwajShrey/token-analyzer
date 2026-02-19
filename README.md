@@ -40,6 +40,7 @@ go build -o token-analyzer .
 - Daily trend sparkline (last 30 days)
 - Actionable insights (cache efficiency, verbose responses, subagent overhead, peak hour)
 - **Prompt Clarity section** with score, weekly trend, and per-metric good/ok/warn labels
+- **Coaching Tip section** with a targeted technique and before/after prompt example
 
 **Web dashboard (`--serve`):**
 - Summary cards for total tokens, cache efficiency, cost, session count
@@ -50,6 +51,7 @@ go build -o token-analyzer .
 - **Hover tooltips** on every metric label and table header explaining what each number means
 - **Good/ok/warn indicators** with one-liner explanations on summary cards
 - **Prompt Clarity section** with composite score, weekly line chart, and per-metric breakdown
+- **Coaching Tip card** with side-by-side weak/strong prompt examples
 
 ## Prompt Clarity
 
@@ -65,6 +67,22 @@ The tool heuristically scores how well-specified your prompts are, across three 
 Score formula: `100 × (0.40 × front_load + 0.35 × (1 − correction_rate) + 0.25 × (1 − clarification_rate))`
 
 Weekly trends are tracked so you can see whether your prompting discipline is improving over time.
+
+## Coaching Tips
+
+After measuring your clarity signals, the tool identifies your single weakest metric and surfaces a concrete, actionable tip — including a technique explanation and a realistic before/after prompt example. Tips rotate weekly (by ISO week number) so you always have something new to try.
+
+The weakest metric is chosen by normalized gap-to-good: whichever signal is furthest from its "good" threshold drives the tip. The tip is omitted entirely when all three signals are green.
+
+Example tip (Front-load Ratio at 51%):
+
+> **Lead with the relevant code**
+>
+> If you are referencing code, paste it in the opening prompt rather than waiting for the model to ask.
+>
+> ✗ `"Can you improve the performance here?"` → `[next turn] "Here's the hot path: ..."`
+>
+> ✓ `"Optimize this hot path for latency. [paste function] Reduce allocations. Keep the same external interface."`
 
 ## How it works
 
