@@ -166,6 +166,8 @@ type ClarityReport struct {
 	Overall      ClarityMetrics
 	Weekly       []WeeklyClarity // sorted asc by WeekStart
 	SessionCount int
+	Tip          *CoachingTip // nil if all metrics good or < 2 sessions
+	ScoreDelta   *float64     // last week minus previous week; nil if < 2 weeks
 }
 
 // AggregatedReport is the top-level result from the aggregation phase.

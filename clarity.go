@@ -323,11 +323,14 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 		return weekly[i].WeekStart < weekly[j].WeekStart
 	})
 
-	return &ClarityReport{
+	result := &ClarityReport{
 		Overall:      overall,
 		Weekly:       weekly,
 		SessionCount: sessionCount,
 	}
+	result.Tip = SelectCoachingTip(result)
+	result.ScoreDelta = computeWeekDelta(result.Weekly)
+	return result
 }
 
 // ---- Insight functions ----

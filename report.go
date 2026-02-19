@@ -191,6 +191,7 @@ func PrintReport(w io.Writer, r *AggregatedReport, useColors bool) {
 	printDailyTrend(p, r)
 	printInsights(p, r)
 	printClaritySection(p, r)
+	printCoachingSection(p, r)
 }
 
 func periodStr(r *AggregatedReport) string {
@@ -569,6 +570,86 @@ func printClaritySection(p *Printer, r *AggregatedReport) {
 		ClarificationRateInsight(cl.Overall.ClarificationRate), MetricDescriptions["clarification_rate"])
 	printClarityMetricRow(p, "Front-load Ratio", cl.Overall.FrontLoadRatio, "↑ higher is better",
 		FrontLoadRatioInsight(cl.Overall.FrontLoadRatio), MetricDescriptions["front_load_ratio"])
+}
+
+// ---- Coaching tip section ----
+
+var metricDisplayNames = map[string]string{
+	"correction_rate":    "Correction Rate",
+	"clarification_rate": "Clarification Rate",
+	"front_load_ratio":   "Front-load Ratio",
+}
+
+func printCoachingSection(p *Printer, r *AggregatedReport) {
+	if r.Clarity == nil || r.Clarity.Tip == nil {
+		return
+	}
+
+	tip := r.Clarity.Tip
+	cl := r.Clarity
+
+	sectionHeader(p, "COACHING TIP")
+
+	// Focus line: metric name, current value, badge, optional week delta
+	displayName := metricDisplayNames[tip.Metric]
+
+	var metricVal float64
+	switch tip.Metric {
+	case "correction_rate":
+		metricVal = cl.Overall.CorrectionRate
+	case "clarification_rate":
+		metricVal = cl.Overall.ClarificationRate
+	case "front_load_ratio":
+		metricVal = cl.Overall.FrontLoadRatio
+	}
+
+	var badge string
+	if tip.Level == "warn" {
+		badge = p.red("[warn]")
+	} else {
+		badge = p.yellow("[ok]")
+	}
+
+	var deltaStr string
+	if cl.ScoreDelta != nil {
+		d := *cl.ScoreDelta
+		switch {
+		case d > 0.5:
+			deltaStr = "  " + p.green(fmt.Sprintf("↑ +%.0f pts from last week", d))
+		case d < -0.5:
+			deltaStr = "  " + p.red(fmt.Sprintf("↓ %.0f pts from last week", d))
+		}
+	}
+
+	p.printf("  Focus: %-22s  %5.1f%%  %s%s\n", displayName, metricVal*100, badge, deltaStr)
+	p.println("")
+
+	// Headline + underline
+	p.printf("  %s\n", p.bold(tip.Headline))
+	p.printf("  %s\n", p.dim(strings.Repeat("─", len(tip.Headline))))
+
+	// Technique (word-wrapped)
+	wrapped := wordWrap(tip.Technique, 68)
+	for _, line := range strings.Split(wrapped, "\n") {
+		p.printf("  %s\n", line)
+	}
+	p.println("")
+
+	// Weak example
+	weakLines := strings.Split(tip.WeakEx, "\n")
+	p.printf("  %s  %s\n", p.red("✗"), p.dim(weakLines[0]))
+	for _, l := range weakLines[1:] {
+		p.printf("     %s\n", p.dim(l))
+	}
+	p.println("")
+
+	// Strong example
+	strongLines := strings.Split(tip.StrongEx, "\n")
+	p.printf("  %s  %s\n", p.green("✓"), strongLines[0])
+	for _, l := range strongLines[1:] {
+		p.printf("     %s\n", l)
+	}
+	p.println("")
 }
 
 func printClarityMetricRow(p *Printer, name string, val float64, direction string, ins MetricInsight, description string) {

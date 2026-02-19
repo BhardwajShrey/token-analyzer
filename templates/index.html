@@ -254,6 +254,97 @@
 
     .insight-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
 
+    /* ---- Coaching tip card ---- */
+    .coaching-card { border-color: rgba(59,130,246,0.35); }
+
+    .coaching-focus {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    .coaching-focus-label {
+      color: var(--text-muted);
+    }
+
+    .coaching-focus-metric {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .coaching-focus-val {
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+
+    .coaching-delta {
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    .coaching-delta.up   { color: var(--green); }
+    .coaching-delta.down { color: var(--red); }
+
+    .coaching-headline {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .coaching-rule {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0 0 12px 0;
+    }
+
+    .coaching-technique {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+
+    .coaching-examples {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 700px) {
+      .coaching-examples { grid-template-columns: 1fr; }
+    }
+
+    .coaching-ex {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .coaching-ex-label {
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .coaching-ex.weak  { border-left: 3px solid var(--red); }
+    .coaching-ex.strong { border-left: 3px solid var(--green); }
+    .coaching-ex.weak  .coaching-ex-label { color: var(--red); }
+    .coaching-ex.strong .coaching-ex-label { color: var(--green); }
+
+    .coaching-ex-text {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+
     /* Token breakdown bar */
     .token-bar {
       display: flex;
@@ -448,6 +539,12 @@
     <div class="section" id="clarity-section">
       <div class="section-header">Prompt Clarity Score</div>
       <div class="section-body" id="clarity-body"></div>
+    </div>
+
+    <!-- Coaching tip -->
+    <div class="section coaching-card" id="coaching-section" style="display:none">
+      <div class="section-header">Coaching Tip</div>
+      <div class="section-body" id="coaching-body"></div>
     </div>
 
     <!-- Daily trend chart -->
@@ -673,8 +770,9 @@ function render(data) {
     </div>
   `;
 
-  // Clarity section
+  // Clarity + coaching sections
   renderClarity(data);
+  renderCoaching(data);
 
   // Daily chart
   const daily = (data.Daily || []);
@@ -772,6 +870,80 @@ function render(data) {
       </div>
     `).join('');
   }
+}
+
+// ---- Coaching tip section ----
+const coachingMetricNames = {
+  correction_rate:    'Correction Rate',
+  clarification_rate: 'Clarification Rate',
+  front_load_ratio:   'Front-load Ratio',
+};
+
+function renderCoaching(data) {
+  const section = document.getElementById('coaching-section');
+  const body    = document.getElementById('coaching-body');
+  const tip     = data.Clarity && data.Clarity.Tip;
+
+  if (!tip) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+
+  const o = data.Clarity.Overall;
+  const metricName = coachingMetricNames[tip.Metric] || tip.Metric;
+
+  const metricValMap = {
+    correction_rate:    o.CorrectionRate,
+    clarification_rate: o.ClarificationRate,
+    front_load_ratio:   o.FrontLoadRatio,
+  };
+  const val = (metricValMap[tip.Metric] || 0) * 100;
+
+  // Week-over-week delta
+  let deltaHtml = '';
+  const delta = data.Clarity.ScoreDelta;
+  if (delta != null) {
+    if (delta > 0.5) {
+      deltaHtml = `<span class="coaching-delta up">↑ +${Math.round(delta)} pts from last week</span>`;
+    } else if (delta < -0.5) {
+      deltaHtml = `<span class="coaching-delta down">↓ ${Math.round(delta)} pts from last week</span>`;
+    }
+  }
+
+  // Before/after examples: replace \n with <br>
+  const weakHtml   = escHtml(tip.WeakEx  || '').replace(/\n/g, '\n');
+  const strongHtml = escHtml(tip.StrongEx || '').replace(/\n/g, '\n');
+
+  body.innerHTML = `
+    <div class="coaching-focus">
+      <span class="coaching-focus-label">Focus:</span>
+      <span class="coaching-focus-metric">${escHtml(metricName)}</span>
+      <span class="coaching-focus-val">${val.toFixed(1)}%</span>
+      ${insightBadge(tip.Level)}
+      ${deltaHtml}
+    </div>
+
+    <div class="coaching-headline">${escHtml(tip.Headline)}</div>
+    <hr class="coaching-rule">
+    <p class="coaching-technique">${escHtml(tip.Technique)}</p>
+
+    <div class="coaching-examples">
+      <div class="coaching-ex weak">
+        <div class="coaching-ex-label">✗ Weak</div>
+        <div class="coaching-ex-text">${weakHtml}</div>
+      </div>
+      <div class="coaching-ex strong">
+        <div class="coaching-ex-label">✓ Strong</div>
+        <div class="coaching-ex-text">${strongHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ---- Clarity section ----
