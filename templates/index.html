@@ -135,6 +135,16 @@
       margin-top: 4px;
     }
 
+    .card .card-insight {
+      font-size: 11px;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .card .card-insight.good { color: var(--green); }
+    .card .card-insight.ok   { color: var(--yellow); }
+    .card .card-insight.warn { color: var(--red); }
+
     .card.green .value { color: var(--green); }
     .card.yellow .value { color: var(--yellow); }
     .card.red .value { color: var(--red); }
@@ -276,6 +286,139 @@
       .grid-2 { grid-template-columns: 1fr; }
       .cards { grid-template-columns: repeat(2, 1fr); }
     }
+
+    /* ---- Tooltip ---- */
+    [data-tip] { position: relative; cursor: help; }
+    [data-tip]::after {
+      content: attr(data-tip);
+      position: absolute; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%);
+      background: #1a1d27; border: 1px solid #2d3148;
+      color: #e2e8f0; font-size: 12px; line-height: 1.5;
+      padding: 8px 12px; border-radius: 6px;
+      width: 240px; white-space: normal;
+      pointer-events: none; opacity: 0;
+      transition: opacity 0.15s; z-index: 100;
+      text-transform: none; letter-spacing: normal; font-weight: 400;
+    }
+    [data-tip]:hover::after { opacity: 1; }
+
+    /* ---- Clarity section ---- */
+    .clarity-score-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+
+    .clarity-score-num {
+      font-size: 34px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .clarity-score-num.good { color: var(--green); }
+    .clarity-score-num.ok   { color: var(--yellow); }
+    .clarity-score-num.warn { color: var(--red); }
+
+    .clarity-score-denom {
+      font-size: 16px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .clarity-score-bar {
+      flex: 0 0 160px;
+      height: 8px;
+      background: var(--surface2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .clarity-score-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .clarity-score-fill.good { background: var(--green); }
+    .clarity-score-fill.ok   { background: var(--yellow); }
+    .clarity-score-fill.warn { background: var(--red); }
+
+    .clarity-score-msg {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .clarity-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+    .clarity-badge.good { background: rgba(34,197,94,0.12); color: var(--green); }
+    .clarity-badge.ok   { background: rgba(234,179,8,0.12);  color: var(--yellow); }
+    .clarity-badge.warn { background: rgba(239,68,68,0.12);  color: var(--red); }
+
+    .clarity-weekly-wrap {
+      margin: 16px 0;
+    }
+
+    .clarity-weekly-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .clarity-metric {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .clarity-metric-name {
+      font-size: 13px;
+      font-weight: 500;
+      width: 155px;
+      flex-shrink: 0;
+    }
+
+    .clarity-metric-val {
+      font-size: 16px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      width: 52px;
+      flex-shrink: 0;
+    }
+
+    .clarity-metric-dir {
+      font-size: 11px;
+      color: var(--text-muted);
+      width: 135px;
+      flex-shrink: 0;
+    }
+
+    .clarity-metric-msg {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-style: italic;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .clarity-empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 24px 0;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -301,6 +444,12 @@
     <!-- Summary cards -->
     <div class="cards" id="summary-cards"></div>
 
+    <!-- Prompt Clarity section -->
+    <div class="section" id="clarity-section">
+      <div class="section-header">Prompt Clarity Score</div>
+      <div class="section-body" id="clarity-body"></div>
+    </div>
+
     <!-- Daily trend chart -->
     <div class="section">
       <div class="section-header">Daily Token Trend</div>
@@ -319,10 +468,10 @@
           <table id="model-table">
             <thead>
               <tr>
-                <th>Model</th>
-                <th class="num">Tokens</th>
-                <th class="num">Cache Eff.</th>
-                <th class="num">Cost</th>
+                <th data-tip="The specific Claude model variant used.">Model</th>
+                <th class="num" data-tip="Total tokens across all types (input + output + cache writes + cache reads).">Tokens</th>
+                <th class="num" data-tip="Cache reads ÷ (input + cache writes + cache reads). Higher = cheaper — cached tokens cost ~10% of fresh input.">Cache Eff.</th>
+                <th class="num" data-tip="Estimated USD based on Anthropic's per-model pricing. Cache reads are billed at a discount.">Cost</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -336,10 +485,10 @@
           <table id="project-table">
             <thead>
               <tr>
-                <th>Project</th>
-                <th class="num">Tokens</th>
-                <th class="num">Cache Eff.</th>
-                <th class="num">Cost</th>
+                <th data-tip="Project folder name derived from the working directory.">Project</th>
+                <th class="num" data-tip="Total tokens across all types for this project.">Tokens</th>
+                <th class="num" data-tip="Cache reads ÷ (input + cache writes + cache reads). Higher = cheaper.">Cache Eff.</th>
+                <th class="num" data-tip="Estimated USD spend for this project.">Cost</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -355,12 +504,12 @@
         <table id="session-table">
           <thead>
             <tr>
-              <th>Session</th>
-              <th>Project</th>
-              <th>Started</th>
-              <th class="num">Tokens</th>
-              <th class="num">Subagent</th>
-              <th class="num">Cost</th>
+              <th data-tip="First 8 characters of the session UUID.">Session</th>
+              <th data-tip="Project this session belongs to.">Project</th>
+              <th data-tip="Timestamp of the first message in the session.">Started</th>
+              <th class="num" data-tip="Main conversation tokens (excludes subagent tokens).">Tokens</th>
+              <th class="num" data-tip="Tokens consumed by subagents spawned within this session. Each subagent starts a fresh context window.">Subagent</th>
+              <th class="num" data-tip="Combined cost of main conversation and subagent tokens.">Cost</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -430,6 +579,44 @@ function shortId(id) {
   return id ? id.slice(0,8) + '…' : '—';
 }
 
+// ---- Insight helpers ----
+function correctionInsight(r) {
+  if (r < 0.10) return {level:'good', msg:"Few walk-backs — your prompts are landing first try."};
+  if (r < 0.25) return {level:'ok',   msg:"Moderate. Try specifying constraints before prompting."};
+  return            {level:'warn', msg:"High. Sketch the full spec mentally before you type."};
+}
+function clarificationInsight(r) {
+  if (r < 0.15) return {level:'good', msg:"Model rarely needs more info — prompts are clear."};
+  if (r < 0.35) return {level:'ok',   msg:"Occasional ambiguity. Add output format and scope upfront."};
+  return            {level:'warn', msg:"Model asks frequently. Include what you want and what you don't."};
+}
+function frontLoadInsight(r) {
+  if (r > 0.60) return {level:'good', msg:"Strong front-loading — context is established upfront."};
+  if (r > 0.40) return {level:'ok',   msg:"Moderate. Push more context into your first message."};
+  return            {level:'warn', msg:"Low — you're discovering requirements through dialogue."};
+}
+function clarityScoreInsight(s) {
+  if (s > 75) return {level:'good', msg:"Strong prompting discipline."};
+  if (s > 50) return {level:'ok',   msg:"Focus on your lowest metric to improve."};
+  return          {level:'warn', msg:"Significant context is leaking out through follow-ups."};
+}
+
+function insightBadge(level) {
+  const label = level === 'warn' ? 'warn' : level;
+  return `<span class="clarity-badge ${level}">[${label}]</span>`;
+}
+
+// Insight for the summary cards
+function cacheEffInsight(eff) {
+  if (eff >= 0.75) return {level:'good', msg:'Cache reads dominate — this is optimal.'};
+  if (eff >= 0.40) return {level:'ok',   msg:'Moderate. Longer sessions and CLAUDE.md help.'};
+  return                  {level:'warn', msg:'Low — try longer sessions; avoid frequent restarts.'};
+}
+function outputRatioInsight(ratio) {
+  if (ratio > 0.30) return {level:'warn', msg:'Responses may be very verbose. Add "be concise" to CLAUDE.md.'};
+  return null;
+}
+
 // ---- Render ----
 function render(data) {
   const grand = data.Grand;
@@ -447,38 +634,47 @@ function render(data) {
 
   // Summary cards
   const effColor = eff >= 0.75 ? 'green' : eff >= 0.40 ? 'yellow' : 'red';
+  const effIns = cacheEffInsight(eff);
+  const outputRatio = total > 0 ? grand.OutputTokens / total : 0;
+  const outIns = outputRatioInsight(outputRatio);
+
   document.getElementById('summary-cards').innerHTML = `
     <div class="card blue">
-      <div class="label">Total Tokens</div>
+      <div class="label" data-tip="Sum of all token types: input, output, cache writes, and cache reads.">Total Tokens</div>
       <div class="value">${fmtTokens(total)}</div>
       <div class="sub">${grand.MessageCount} messages</div>
     </div>
     <div class="card ${effColor}">
-      <div class="label">Cache Efficiency</div>
+      <div class="label" data-tip="Cache reads ÷ (input + cache writes + cache reads). Higher means cheaper — cached tokens cost ~10% of fresh input.">Cache Efficiency</div>
       <div class="value">${fmtPct(eff)}</div>
       <div class="sub">${fmtTokens(grand.CacheReadInputTokens)} cache reads</div>
+      <div class="card-insight ${effIns.level}">${effIns.msg}</div>
     </div>
     <div class="card purple">
-      <div class="label">Estimated Cost</div>
+      <div class="label" data-tip="Estimated USD based on Anthropic's per-model pricing. Cache reads are billed at a discount.">Estimated Cost</div>
       <div class="value">${fmtCost(grand.CostUSD)}</div>
       <div class="sub">${Object.keys(data.ModelSummaries || {}).length} models</div>
     </div>
     <div class="card cyan">
-      <div class="label">Sessions</div>
+      <div class="label" data-tip="Number of Claude Code conversation sessions across all projects.">Sessions</div>
       <div class="value">${(data.Sessions || []).length}</div>
       <div class="sub">${(data.Projects || []).length} project(s)</div>
     </div>
     <div class="card">
-      <div class="label">Input Tokens</div>
+      <div class="label" data-tip="Uncached prompt tokens — the portion of your context not served from cache.">Input Tokens</div>
       <div class="value" style="font-size:20px">${fmtTokens(grand.InputTokens)}</div>
       <div class="sub">${total > 0 ? fmtPct(grand.InputTokens/total) : '0%'} of total</div>
     </div>
     <div class="card">
-      <div class="label">Output Tokens</div>
+      <div class="label" data-tip="Tokens generated by the model. Output is billed at 5× the input rate.">Output Tokens</div>
       <div class="value" style="font-size:20px">${fmtTokens(grand.OutputTokens)}</div>
       <div class="sub">${total > 0 ? fmtPct(grand.OutputTokens/total) : '0%'} of total</div>
+      ${outIns ? `<div class="card-insight ${outIns.level}">${outIns.msg}</div>` : ''}
     </div>
   `;
+
+  // Clarity section
+  renderClarity(data);
 
   // Daily chart
   const daily = (data.Daily || []);
@@ -576,11 +772,111 @@ function render(data) {
       </div>
     `).join('');
   }
+}
 
+// ---- Clarity section ----
+const metricTips = {
+  correction_rate:    '% of your messages that walk back or contradict a prior request. Measures how precisely you specified intent the first time.',
+  clarification_rate: '% of sessions where the model asked a clarifying question in its first response. High = your prompts are underspecified.',
+  front_load_ratio:   '% of your total prompt text that was in your first message. High = you front-loaded context; low = you trickled it in reactively.',
+};
+
+function clarityMetricRow(name, valPct, direction, ins, metricKey) {
+  const tip = metricTips[metricKey] || '';
+  return `
+    <div class="clarity-metric">
+      <span class="clarity-metric-name" data-tip="${tip}">${name}</span>
+      <span class="clarity-metric-val">${valPct.toFixed(1)}%</span>
+      <span class="clarity-metric-dir">${direction}</span>
+      ${insightBadge(ins.level)}
+      <span class="clarity-metric-msg">"${ins.msg}"</span>
+    </div>`;
+}
+
+function renderClarity(data) {
+  const body = document.getElementById('clarity-body');
+  const clarity = data.Clarity;
+
+  if (!clarity || clarity.SessionCount < 2) {
+    body.innerHTML = '<div class="clarity-empty">Collect 2+ sessions to see clarity trends.</div>';
+    return;
+  }
+
+  const o = clarity.Overall;
+  const si  = clarityScoreInsight(o.Score);
+  const ci  = correctionInsight(o.CorrectionRate);
+  const cli = clarificationInsight(o.ClarificationRate);
+  const fi  = frontLoadInsight(o.FrontLoadRatio);
+
+  const scorePct = Math.min(100, Math.max(0, o.Score));
+  const weekly = clarity.Weekly || [];
+  const hasWeekly = weekly.length > 1;
+
+  body.innerHTML = `
+    <div class="clarity-score-row">
+      <span class="clarity-score-num ${si.level}">${Math.round(o.Score)}<span class="clarity-score-denom">/100</span></span>
+      <div class="clarity-score-bar">
+        <div class="clarity-score-fill ${si.level}" style="width:${scorePct}%"></div>
+      </div>
+      ${insightBadge(si.level)}
+      <span class="clarity-score-msg" data-tip="Composite 0–100 from the three clarity signals. Tracks your prompting discipline over time.">"${si.msg}"</span>
+    </div>
+
+    ${hasWeekly ? `
+    <div class="clarity-weekly-wrap">
+      <div class="clarity-weekly-label">Weekly Score Trend</div>
+      <div class="chart-container" style="height:110px">
+        <canvas id="clarity-weekly-chart"></canvas>
+      </div>
+    </div>` : ''}
+
+    <div style="margin-top:${hasWeekly ? 4 : 16}px">
+      ${clarityMetricRow('Correction Rate',    o.CorrectionRate    * 100, '↓ lower is better', ci,  'correction_rate')}
+      ${clarityMetricRow('Clarification Rate', o.ClarificationRate * 100, '↓ lower is better', cli, 'clarification_rate')}
+      ${clarityMetricRow('Front-load Ratio',   o.FrontLoadRatio    * 100, '↑ higher is better', fi,  'front_load_ratio')}
+    </div>
+  `;
+
+  // Weekly trend chart
+  if (hasWeekly) {
+    if (clarityWeeklyChart) { clarityWeeklyChart.destroy(); clarityWeeklyChart = null; }
+    const wLabels = weekly.map((_, i) => 'W' + (i + 1));
+    const wScores = weekly.map(w => Math.round(w.Score));
+    const ctx2 = document.getElementById('clarity-weekly-chart').getContext('2d');
+    clarityWeeklyChart = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: wLabels,
+        datasets: [{
+          label: 'Clarity Score',
+          data: wScores,
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34,197,94,0.08)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+          pointBackgroundColor: '#22c55e',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#8892a4' }, grid: { color: '#2d3148' } },
+          y: { min: 0, max: 100, ticks: { color: '#8892a4', stepSize: 25 }, grid: { color: '#2d3148' } }
+        }
+      }
+    });
+  } else if (clarityWeeklyChart) {
+    clarityWeeklyChart.destroy();
+    clarityWeeklyChart = null;
+  }
 }
 
 // ---- Live update ----
 let dailyChart = null;
+let clarityWeeklyChart = null;
 const POLL_INTERVAL_MS = 30_000;
 
 function setLiveStatus(ok) {

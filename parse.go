@@ -62,3 +62,47 @@ func ParseFile(path string) (records []MessageRecord, parseErrors int) {
 
 	return records, parseErrors
 }
+
+// ParseFileAllRecords reads a JSONL file and returns ALL records regardless of
+// type or usage. Used by the clarity engine which needs user + assistant records.
+// Records are still deduplicated by UUID.
+func ParseFileAllRecords(path string) (records []MessageRecord, parseErrors int) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 1
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+
+	seen := make(map[string]bool)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		var rec MessageRecord
+		if err := json.Unmarshal(line, &rec); err != nil {
+			parseErrors++
+			continue
+		}
+
+		if rec.UUID != "" {
+			if seen[rec.UUID] {
+				continue
+			}
+			seen[rec.UUID] = true
+		}
+
+		records = append(records, rec)
+	}
+
+	if err := scanner.Err(); err != nil {
+		parseErrors++
+	}
+
+	return records, parseErrors
+}

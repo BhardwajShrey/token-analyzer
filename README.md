@@ -1,6 +1,6 @@
 # token-analyzer
 
-A CLI tool that parses your local Claude Code session logs and gives you a breakdown of token usage, costs, and cache efficiency — with both a terminal report and a live web dashboard.
+A CLI tool that parses your local Claude Code session logs and gives you a breakdown of token usage, costs, cache efficiency, and **prompt clarity** — with both a terminal report and a live web dashboard.
 
 ## Usage
 
@@ -39,6 +39,7 @@ go build -o token-analyzer .
 - Top sessions with subagent overhead separated out
 - Daily trend sparkline (last 30 days)
 - Actionable insights (cache efficiency, verbose responses, subagent overhead, peak hour)
+- **Prompt Clarity section** with score, weekly trend, and per-metric good/ok/warn labels
 
 **Web dashboard (`--serve`):**
 - Summary cards for total tokens, cache efficiency, cost, session count
@@ -46,6 +47,24 @@ go build -o token-analyzer .
 - Model, project, and session tables
 - Color-coded insight cards
 - Auto-refreshes every 30 seconds to reflect new sessions as you work
+- **Hover tooltips** on every metric label and table header explaining what each number means
+- **Good/ok/warn indicators** with one-liner explanations on summary cards
+- **Prompt Clarity section** with composite score, weekly line chart, and per-metric breakdown
+
+## Prompt Clarity
+
+The tool heuristically scores how well-specified your prompts are, across three signals:
+
+| Metric | What it measures | Good direction |
+|---|---|---|
+| **Correction Rate** | % of messages that walk back a prior request | ↓ lower |
+| **Clarification Rate** | % of sessions where the model asked a clarifying question first | ↓ lower |
+| **Front-load Ratio** | % of your prompt text sent in the first message | ↑ higher |
+| **Clarity Score** | Composite 0–100 weighted across the three signals | ↑ higher |
+
+Score formula: `100 × (0.40 × front_load + 0.35 × (1 − correction_rate) + 0.25 × (1 − clarification_rate))`
+
+Weekly trends are tracked so you can see whether your prompting discipline is improving over time.
 
 ## How it works
 

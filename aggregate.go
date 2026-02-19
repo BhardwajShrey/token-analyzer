@@ -189,6 +189,9 @@ func Aggregate(files []FileInfo, opts AggregateOptions) *AggregatedReport {
 	// Generate insights
 	report.Insights = generateInsights(report, opts.StatsCache)
 
+	// Compute prompt clarity metrics
+	report.Clarity = ComputeClarity(files, cutoff)
+
 	return report
 }
 

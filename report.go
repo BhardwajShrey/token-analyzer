@@ -190,6 +190,7 @@ func PrintReport(w io.Writer, r *AggregatedReport, useColors bool) {
 	printSessions(p, r)
 	printDailyTrend(p, r)
 	printInsights(p, r)
+	printClaritySection(p, r)
 }
 
 func periodStr(r *AggregatedReport) string {
@@ -490,4 +491,98 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ---- Prompt Clarity section ----
+
+func printClaritySection(p *Printer, r *AggregatedReport) {
+	sectionHeader(p, "PROMPT CLARITY")
+
+	if r.Clarity == nil || r.Clarity.SessionCount < 2 {
+		p.println("  Not enough data yet (need 2+ sessions)")
+		p.println("")
+		return
+	}
+
+	cl := r.Clarity
+
+	// Clarity Score row
+	score := cl.Overall.Score
+	si := ClarityScoreInsight(score)
+	bar := cacheBar(score/100, 20)
+	var scoreBadge, coloredBar string
+	switch si.Level {
+	case "good":
+		scoreBadge = p.green("[good]")
+		coloredBar = p.green(bar)
+	case "ok":
+		scoreBadge = p.yellow("[ok]")
+		coloredBar = p.yellow(bar)
+	default:
+		scoreBadge = p.red("[warn]")
+		coloredBar = p.red(bar)
+	}
+	p.printf("  %-22s  %d/100  %s  %s\n", "Clarity Score", int(math.Round(score)), coloredBar, scoreBadge)
+	p.printf("  %-22s  %s\n", "", p.dim(`"`+si.Oneliner+`"`))
+	p.println("")
+
+	// Weekly trend sparkline
+	if len(cl.Weekly) > 1 {
+		var wVals []int64
+		for _, w := range cl.Weekly {
+			wVals = append(wVals, int64(math.Round(w.Score)))
+		}
+		spark := sparkline(wVals)
+		runes := []rune(spark)
+
+		var trendStr string
+		first := cl.Weekly[0].Score
+		last := cl.Weekly[len(cl.Weekly)-1].Score
+		switch {
+		case last > first+2:
+			trendStr = p.green("(↑ improving)")
+		case last < first-2:
+			trendStr = p.red("(↓ declining)")
+		default:
+			trendStr = p.gray("(→ stable)")
+		}
+
+		var sb strings.Builder
+		for i := range cl.Weekly {
+			if i > 0 {
+				sb.WriteString("  ")
+			}
+			ch := rune('░')
+			if i < len(runes) {
+				ch = runes[i]
+			}
+			fmt.Fprintf(&sb, "W%d%c", i+1, ch)
+		}
+		p.printf("  %-22s  %s  %s\n", "Weekly trend", sb.String(), trendStr)
+		p.println("")
+	}
+
+	// Individual metric rows
+	printClarityMetricRow(p, "Correction Rate", cl.Overall.CorrectionRate, "↓ lower is better",
+		CorrectionRateInsight(cl.Overall.CorrectionRate), MetricDescriptions["correction_rate"])
+	printClarityMetricRow(p, "Clarification Rate", cl.Overall.ClarificationRate, "↓ lower is better",
+		ClarificationRateInsight(cl.Overall.ClarificationRate), MetricDescriptions["clarification_rate"])
+	printClarityMetricRow(p, "Front-load Ratio", cl.Overall.FrontLoadRatio, "↑ higher is better",
+		FrontLoadRatioInsight(cl.Overall.FrontLoadRatio), MetricDescriptions["front_load_ratio"])
+}
+
+func printClarityMetricRow(p *Printer, name string, val float64, direction string, ins MetricInsight, description string) {
+	var badge string
+	switch ins.Level {
+	case "good":
+		badge = p.green("[good]")
+	case "ok":
+		badge = p.yellow("[ok]")
+	default:
+		badge = p.red("[warn]")
+	}
+	p.printf("  %-22s  %5.1f%%  %s  %s\n", name, val*100, p.gray(direction), badge)
+	p.printf("    %s\n", p.dim(`"`+ins.Oneliner+`"`))
+	p.printf("    %s\n", p.gray(description))
+	p.println("")
 }

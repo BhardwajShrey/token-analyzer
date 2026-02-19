@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ---- Raw JSONL record types ----
 
@@ -21,8 +24,10 @@ func (u TokenUsage) IsZero() bool {
 
 // MessageBody is the nested "message" object inside a JSONL record.
 type MessageBody struct {
-	Model string     `json:"model"`
-	Usage TokenUsage `json:"usage"`
+	Model   string          `json:"model"`
+	Usage   TokenUsage      `json:"usage"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
 }
 
 // MessageRecord is a single line from any JSONL session file.
@@ -138,6 +143,31 @@ type Insight struct {
 	Message  string
 }
 
+// ClarityMetrics holds the aggregate prompt clarity measurements.
+type ClarityMetrics struct {
+	CorrectionRate    float64
+	ClarificationRate float64
+	FrontLoadRatio    float64
+	Score             float64
+}
+
+// WeeklyClarity holds clarity metrics for one ISO week (Monday-based).
+type WeeklyClarity struct {
+	WeekStart         string // "YYYY-MM-DD" Monday
+	CorrectionRate    float64
+	ClarificationRate float64
+	FrontLoadRatio    float64
+	Score             float64
+	SessionCount      int
+}
+
+// ClarityReport is the top-level clarity result attached to AggregatedReport.
+type ClarityReport struct {
+	Overall      ClarityMetrics
+	Weekly       []WeeklyClarity // sorted asc by WeekStart
+	SessionCount int
+}
+
 // AggregatedReport is the top-level result from the aggregation phase.
 type AggregatedReport struct {
 	Grand          UsageTotals
@@ -152,6 +182,7 @@ type AggregatedReport struct {
 	FilterDays     int
 	FilterProject  string
 	PeakHour       int // -1 if unknown
+	Clarity        *ClarityReport
 }
 
 // ---- stats-cache.json types ----
