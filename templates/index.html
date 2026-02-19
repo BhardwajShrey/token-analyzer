@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Code Token Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242736;
+      --border: #2d3148;
+      --text: #e2e8f0;
+      --text-muted: #8892a4;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --purple: #a855f7;
+      --cyan: #06b6d4;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+
+    header .right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header .period {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .live-dot.stale { background: var(--yellow); animation: none; }
+
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .refresh-btn:hover { border-color: var(--blue); color: var(--blue); }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 32px;
+    }
+
+    /* Cards grid */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+
+    .card .label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+
+    .card .value {
+      font-size: 26px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card .sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .card.green .value { color: var(--green); }
+    .card.yellow .value { color: var(--yellow); }
+    .card.red .value { color: var(--red); }
+    .card.blue .value { color: var(--blue); }
+    .card.purple .value { color: var(--purple); }
+    .card.cyan .value { color: var(--cyan); }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .section-body {
+      padding: 20px;
+    }
+
+    /* Chart container */
+    .chart-container {
+      position: relative;
+      height: 260px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th.num, td.num {
+      text-align: right;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--surface2);
+    }
+
+    td .sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Efficiency badge */
+    .eff {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .eff.good { background: rgba(34,197,94,0.12); color: var(--green); }
+    .eff.ok   { background: rgba(234,179,8,0.12);  color: var(--yellow); }
+    .eff.low  { background: rgba(239,68,68,0.12);  color: var(--red); }
+
+    /* Insights */
+    .insight {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .insight:last-child { margin-bottom: 0; }
+
+    .insight.good { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); }
+    .insight.warn { background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.2); }
+    .insight.info { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); }
+
+    .insight-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+    /* Token breakdown bar */
+    .token-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .token-bar-segment { height: 100%; }
+
+    /* Loading / error */
+    #loading, #error {
+      text-align: center;
+      padding: 80px 32px;
+      color: var(--text-muted);
+    }
+
+    #error { color: var(--red); }
+
+    /* Two-column layout for bottom tables */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="loading">Loading token data…</div>
+<div id="error" style="display:none"></div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>Claude Code Token Analyzer</h1>
+    <div class="right">
+      <span class="period" id="period-label"></span>
+      <div class="live-badge">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="updated-label">Loading…</span>
+      </div>
+      <button class="refresh-btn" onclick="loadReport()">Refresh</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Summary cards -->
+    <div class="cards" id="summary-cards"></div>
+
+    <!-- Daily trend chart -->
+    <div class="section">
+      <div class="section-header">Daily Token Trend</div>
+      <div class="section-body">
+        <div class="chart-container">
+          <canvas id="daily-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model breakdown + Projects side by side -->
+    <div class="grid-2">
+      <div class="section">
+        <div class="section-header">By Model</div>
+        <div class="section-body" style="padding:0">
+          <table id="model-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="num">Tokens</th>
+                <th class="num">Cache Eff.</th>
+                <th class="num">Cost</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">Projects</div>
+        <div class="section-body" style="padding:0">
+          <table id="project-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th class="num">Tokens</th>
+                <th class="num">Cache Eff.</th>
+                <th class="num">Cost</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sessions table -->
+    <div class="section">
+      <div class="section-header">Top Sessions</div>
+      <div class="section-body" style="padding:0">
+        <table id="session-table">
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>Project</th>
+              <th>Started</th>
+              <th class="num">Tokens</th>
+              <th class="num">Subagent</th>
+              <th class="num">Cost</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Insights -->
+    <div class="section" id="insights-section">
+      <div class="section-header">Insights</div>
+      <div class="section-body" id="insights-body"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ---- Formatting helpers ----
+function fmtTokens(n) {
+  if (n === 0) return '0';
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+
+function fmtCost(v) {
+  if (v < 0.01 && v > 0) return '$' + v.toFixed(4);
+  return '$' + v.toFixed(2);
+}
+
+function fmtPct(v) {
+  return (v * 100).toFixed(1) + '%';
+}
+
+function fmtTime(iso) {
+  if (!iso || iso === '0001-01-01T00:00:00Z') return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', {month:'short', day:'2-digit'}) + ' ' +
+         d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
+}
+
+function fmtDate(iso) {
+  if (!iso || iso === '0001-01-01T00:00:00Z') return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', {month:'short', day:'2-digit', year:'numeric'});
+}
+
+function effClass(v) {
+  if (v >= 0.75) return 'good';
+  if (v >= 0.40) return 'ok';
+  return 'low';
+}
+
+function cacheEff(totals) {
+  const denom = totals.InputTokens + totals.CacheCreationInputTokens + totals.CacheReadInputTokens;
+  if (denom === 0) return 0;
+  return totals.CacheReadInputTokens / denom;
+}
+
+function totalTok(totals) {
+  return totals.InputTokens + totals.OutputTokens +
+         totals.CacheCreationInputTokens + totals.CacheReadInputTokens;
+}
+
+function shortId(id) {
+  return id ? id.slice(0,8) + '…' : '—';
+}
+
+// ---- Render ----
+function render(data) {
+  const grand = data.Grand;
+  const total = totalTok(grand);
+  const eff = cacheEff(grand);
+
+  // Period label
+  let period = '';
+  if (data.FilterDays > 0) {
+    period = 'Last ' + data.FilterDays + ' days';
+  } else if (data.DateFrom && data.DateFrom !== '0001-01-01T00:00:00Z') {
+    period = fmtDate(data.DateFrom) + ' – ' + fmtDate(data.DateTo);
+  }
+  document.getElementById('period-label').textContent = period;
+
+  // Summary cards
+  const effColor = eff >= 0.75 ? 'green' : eff >= 0.40 ? 'yellow' : 'red';
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="card blue">
+      <div class="label">Total Tokens</div>
+      <div class="value">${fmtTokens(total)}</div>
+      <div class="sub">${grand.MessageCount} messages</div>
+    </div>
+    <div class="card ${effColor}">
+      <div class="label">Cache Efficiency</div>
+      <div class="value">${fmtPct(eff)}</div>
+      <div class="sub">${fmtTokens(grand.CacheReadInputTokens)} cache reads</div>
+    </div>
+    <div class="card purple">
+      <div class="label">Estimated Cost</div>
+      <div class="value">${fmtCost(grand.CostUSD)}</div>
+      <div class="sub">${Object.keys(data.ModelSummaries || {}).length} models</div>
+    </div>
+    <div class="card cyan">
+      <div class="label">Sessions</div>
+      <div class="value">${(data.Sessions || []).length}</div>
+      <div class="sub">${(data.Projects || []).length} project(s)</div>
+    </div>
+    <div class="card">
+      <div class="label">Input Tokens</div>
+      <div class="value" style="font-size:20px">${fmtTokens(grand.InputTokens)}</div>
+      <div class="sub">${total > 0 ? fmtPct(grand.InputTokens/total) : '0%'} of total</div>
+    </div>
+    <div class="card">
+      <div class="label">Output Tokens</div>
+      <div class="value" style="font-size:20px">${fmtTokens(grand.OutputTokens)}</div>
+      <div class="sub">${total > 0 ? fmtPct(grand.OutputTokens/total) : '0%'} of total</div>
+    </div>
+  `;
+
+  // Daily chart
+  const daily = (data.Daily || []);
+  const labels = daily.map(d => d.Date);
+  const dsInput = daily.map(d => d.Totals.InputTokens);
+  const dsOutput = daily.map(d => d.Totals.OutputTokens);
+  const dsCacheWrite = daily.map(d => d.Totals.CacheCreationInputTokens);
+  const dsCacheRead = daily.map(d => d.Totals.CacheReadInputTokens);
+
+  if (dailyChart) { dailyChart.destroy(); dailyChart = null; }
+  const ctx = document.getElementById('daily-chart').getContext('2d');
+  dailyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Cache Reads',  data: dsCacheRead,  backgroundColor: 'rgba(6,182,212,0.7)',  stack: 'a' },
+        { label: 'Cache Writes', data: dsCacheWrite, backgroundColor: 'rgba(168,85,247,0.7)', stack: 'a' },
+        { label: 'Output',       data: dsOutput,     backgroundColor: 'rgba(59,130,246,0.7)', stack: 'a' },
+        { label: 'Input',        data: dsInput,      backgroundColor: 'rgba(99,102,241,0.7)', stack: 'a' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8892a4', boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${fmtTokens(ctx.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#8892a4', maxRotation: 45 }, grid: { color: '#2d3148' } },
+        y: { stacked: true, ticks: { color: '#8892a4', callback: v => fmtTokens(v) }, grid: { color: '#2d3148' } }
+      }
+    }
+  });
+
+  // Model table
+  const modelEntries = Object.entries(data.ModelSummaries || {})
+    .map(([k, v]) => ({ name: k, totals: v }))
+    .sort((a, b) => totalTok(b.totals) - totalTok(a.totals));
+
+  document.querySelector('#model-table tbody').innerHTML = modelEntries.map(e => {
+    const ef = cacheEff(e.totals);
+    return `<tr>
+      <td>${e.name}</td>
+      <td class="num">${fmtTokens(totalTok(e.totals))}</td>
+      <td class="num"><span class="eff ${effClass(ef)}">${fmtPct(ef)}</span></td>
+      <td class="num">${fmtCost(e.totals.CostUSD)}</td>
+    </tr>`;
+  }).join('');
+
+  // Project table
+  document.querySelector('#project-table tbody').innerHTML = (data.Projects || []).map(p => {
+    const ef = cacheEff(p.Totals);
+    return `<tr>
+      <td>
+        <div>${p.Name}</div>
+        <div class="sub">${p.Path}</div>
+      </td>
+      <td class="num">${fmtTokens(totalTok(p.Totals))}</td>
+      <td class="num"><span class="eff ${effClass(ef)}">${fmtPct(ef)}</span></td>
+      <td class="num">${fmtCost(p.Totals.CostUSD)}</td>
+    </tr>`;
+  }).join('');
+
+  // Session table (top 15)
+  const sessions = (data.Sessions || []).slice(0, 15);
+  document.querySelector('#session-table tbody').innerHTML = sessions.map(s => {
+    const subTok = totalTok(s.SubagentTotals);
+    const totalCost = s.Totals.CostUSD + s.SubagentTotals.CostUSD;
+    return `<tr>
+      <td style="font-family:monospace;font-size:12px">${shortId(s.SessionID)}</td>
+      <td>${s.ProjectName || '—'}</td>
+      <td>${fmtTime(s.StartTime)}</td>
+      <td class="num">${fmtTokens(totalTok(s.Totals))}</td>
+      <td class="num">${subTok > 0 ? fmtTokens(subTok) : '—'}</td>
+      <td class="num">${fmtCost(totalCost)}</td>
+    </tr>`;
+  }).join('');
+
+  // Insights
+  const insights = data.Insights || [];
+  if (insights.length === 0) {
+    document.getElementById('insights-section').style.display = 'none';
+  } else {
+    const icons = { good: '✅', warn: '⚠️', info: 'ℹ️' };
+    document.getElementById('insights-body').innerHTML = insights.map(ins => `
+      <div class="insight ${ins.Severity}">
+        <span class="insight-icon">${icons[ins.Severity] || 'ℹ️'}</span>
+        <span>${ins.Message}</span>
+      </div>
+    `).join('');
+  }
+
+}
+
+// ---- Live update ----
+let dailyChart = null;
+const POLL_INTERVAL_MS = 30_000;
+
+function setLiveStatus(ok) {
+  const dot = document.getElementById('live-dot');
+  const label = document.getElementById('updated-label');
+  if (ok) {
+    dot.classList.remove('stale');
+    const now = new Date();
+    label.textContent = 'Updated ' + now.toLocaleTimeString();
+  } else {
+    dot.classList.add('stale');
+    label.textContent = 'Update failed';
+  }
+}
+
+function loadReport() {
+  fetch('/api/report')
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(data => {
+      render(data);
+      setLiveStatus(true);
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+    })
+    .catch(err => {
+      setLiveStatus(false);
+      // Only show error page on first load
+      if (document.getElementById('app').style.display === 'none') {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error').textContent = 'Failed to load report: ' + err.message;
+      }
+    });
+}
+
+// Initial load + periodic refresh
+loadReport();
+setInterval(loadReport, POLL_INTERVAL_MS);
+</script>
+</body>
+</html>
