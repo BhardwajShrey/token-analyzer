@@ -706,7 +706,8 @@ func printClarityMetricRow(p *Printer, name string, val float64, direction strin
 				prefix = "└─"
 			}
 			label := strings.ToUpper(e.name[:1]) + e.name[1:]
-			p.printf("    %s %-10s %5.1f%%\n", prefix, label, e.rate*100)
+			hint := CorrectionTypeHints[e.name]
+			p.printf("    %s %-10s %5.1f%%  %s\n", prefix, label, e.rate*100, p.gray("→ "+hint))
 		}
 	}
 

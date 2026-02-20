@@ -512,15 +512,20 @@
     }
 
     .corr-breakdown { margin-top: 8px; }
+    .corr-breakdown-entry {}
     .corr-breakdown-row {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 3px 0 3px 12px;
+      padding: 3px 0 1px 12px;
       border-left: 2px solid var(--border);
       font-size: 12px; color: var(--text-muted);
     }
-    .corr-breakdown-row:last-child { border-left-color: transparent; }
+    .corr-breakdown-entry:last-child .corr-breakdown-row { border-left-color: transparent; }
     .corr-breakdown-label { text-transform: capitalize; }
     .corr-breakdown-val { font-variant-numeric: tabular-nums; }
+    .corr-breakdown-hint {
+      font-size: 11px; color: var(--text-muted); opacity: 0.8;
+      font-style: italic; padding: 0 0 5px 14px;
+    }
   </style>
 </head>
 <body>
@@ -690,8 +695,8 @@ function shortId(id) {
 // ---- Insight helpers ----
 function correctionInsight(r) {
   if (r < 0.10) return {level:'good', msg:"Few walk-backs — your prompts are landing first try."};
-  if (r < 0.25) return {level:'ok',   msg:"Moderate. Try specifying constraints before prompting."};
-  return            {level:'warn', msg:"High. Sketch the full spec mentally before you type."};
+  if (r < 0.25) return {level:'ok',   msg:"Moderate. Add a constraints block and name the output format upfront."};
+  return            {level:'warn', msg:"High. Specify scope, output format, and constraints before writing the request."};
 }
 function clarificationInsight(r) {
   if (r < 0.15) return {level:'good', msg:"Model rarely needs more info — prompts are clear."};
@@ -701,13 +706,19 @@ function clarificationInsight(r) {
 function frontLoadInsight(r) {
   if (r > 0.60) return {level:'good', msg:"Strong front-loading — context is established upfront."};
   if (r > 0.40) return {level:'ok',   msg:"Moderate. Push more context into your first message."};
-  return            {level:'warn', msg:"Low — you're discovering requirements through dialogue."};
+  return            {level:'warn', msg:"Paste all relevant code, constraints, and context into your first message."};
 }
 function clarityScoreInsight(s) {
   if (s > 75) return {level:'good', msg:"Strong prompting discipline."};
-  if (s > 50) return {level:'ok',   msg:"Focus on your lowest metric to improve."};
-  return          {level:'warn', msg:"Significant context is leaking out through follow-ups."};
+  if (s > 50) return {level:'ok',   msg:"Apply the coaching tip for your weakest metric below."};
+  return          {level:'warn', msg:"Front-load constraints and context — most detail is leaking through follow-ups."};
 }
+
+const correctionTypeHints = {
+  scope:  'Add a constraints block — list the files and interfaces that must not change.',
+  format: 'Specify the output medium (code / prose / JSON / bullets) in your opening sentence.',
+  intent: 'Lead with the goal before the context: write what you want first, then why.',
+};
 
 function insightBadge(level) {
   const label = level === 'warn' ? 'warn' : level;
@@ -982,10 +993,13 @@ function clarityMetricRow(name, valPct, direction, ins, metricKey, breakdown) {
       .sort((a, b) => b[1] - a[1]);
     if (entries.length > 0) {
       breakdownHtml = `<div class="corr-breakdown">${
-        entries.map(([k, v], i) => `
-          <div class="corr-breakdown-row">
-            <span class="corr-breakdown-label">${k}</span>
-            <span class="corr-breakdown-val">${(v * 100).toFixed(1)}%</span>
+        entries.map(([k, v]) => `
+          <div class="corr-breakdown-entry">
+            <div class="corr-breakdown-row">
+              <span class="corr-breakdown-label">${k}</span>
+              <span class="corr-breakdown-val">${(v * 100).toFixed(1)}%</span>
+            </div>
+            ${correctionTypeHints[k] ? `<div class="corr-breakdown-hint">${correctionTypeHints[k]}</div>` : ''}
           </div>`
         ).join('')
       }</div>`;

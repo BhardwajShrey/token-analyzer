@@ -442,9 +442,9 @@ func CorrectionRateInsight(r float64) MetricInsight {
 	case r < 0.10:
 		return MetricInsight{"good", "Few walk-backs — your prompts are landing first try."}
 	case r < 0.25:
-		return MetricInsight{"ok", "Moderate. Try specifying constraints before prompting."}
+		return MetricInsight{"ok", "Moderate. Add a constraints block and name the output format upfront."}
 	default:
-		return MetricInsight{"warn", "High. Sketch the full spec mentally before you type."}
+		return MetricInsight{"warn", "High. Specify scope, output format, and constraints before writing the request."}
 	}
 }
 
@@ -466,7 +466,7 @@ func FrontLoadRatioInsight(r float64) MetricInsight {
 	case r > 0.40:
 		return MetricInsight{"ok", "Moderate. Push more context into your first message."}
 	default:
-		return MetricInsight{"warn", "Low — you're discovering requirements through dialogue."}
+		return MetricInsight{"warn", "Paste all relevant code, constraints, and context into your first message."}
 	}
 }
 
@@ -475,10 +475,18 @@ func ClarityScoreInsight(s float64) MetricInsight {
 	case s > 75:
 		return MetricInsight{"good", "Strong prompting discipline."}
 	case s > 50:
-		return MetricInsight{"ok", "Focus on your lowest metric to improve."}
+		return MetricInsight{"ok", "Apply the coaching tip for your weakest metric below."}
 	default:
-		return MetricInsight{"warn", "Significant context is leaking out through follow-ups."}
+		return MetricInsight{"warn", "Front-load constraints and context — most detail is leaking through follow-ups."}
 	}
+}
+
+// CorrectionTypeHints is the short, actionable one-liner shown next to each
+// correction type in the terminal breakdown tree.
+var CorrectionTypeHints = map[string]string{
+	"scope":  "add a constraints block",
+	"format": "name the output medium first",
+	"intent": "lead with the goal, not the context",
 }
 
 // MetricDescriptions provides tooltip/description text for each metric.
