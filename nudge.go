@@ -1,10 +1,11 @@
 package main
 
-import "time"
+import "math/rand"
 
 // CoachingTip is a single actionable nudge tied to the user's weakest clarity metric.
 type CoachingTip struct {
 	Metric    string // "correction_rate" | "clarification_rate" | "front_load_ratio"
+	SubMetric string // "scope" | "format" | "intent" — empty for non-correction tips
 	Level     string // "ok" | "warn"
 	Headline  string // short imperative phrase
 	Technique string // 2–3 sentence explanation
@@ -122,19 +123,139 @@ var tipBank = map[string][]CoachingTip{
 			StrongEx:  "Why is TestParseFile failing? Error:\n[paste error output]\nRelevant code:\n[paste function + test case]",
 		},
 	},
+	"correction_scope_warn": {
+		{
+			Metric:    "correction_rate",
+			SubMetric: "scope",
+			Level:     "warn",
+			Headline:  "Write a constraints block",
+			Technique: "Scope corrections happen when the model touches files or interfaces you didn't want changed. Add a dedicated constraints block to every prompt: list files that are off-limits, interfaces that must stay intact, and folders that are read-only. Put it right after your task description so it's impossible to miss.",
+			WeakEx:    "Refactor the parser",
+			StrongEx:  "Refactor parseConfig in config/parser.go to reduce nesting.\nConstraints: only modify config/parser.go. Do not touch config/types.go, any test files, or the public ParseConfig signature.",
+		},
+		{
+			Metric:    "correction_rate",
+			SubMetric: "scope",
+			Level:     "warn",
+			Headline:  "Scope the task by file, not topic",
+			Technique: "Describing a task by topic ('fix error handling') leaves scope ambiguous — the model may touch every file related to that topic. Instead, name the exact file and function. 'Fix error handling in ParseFile in parse.go' makes the boundary unambiguous without any extra constraints line.",
+			WeakEx:    "Fix the error handling across the codebase",
+			StrongEx:  "Fix error handling in ParseFile in parse.go only.\nWrap errors with fmt.Errorf. Do not modify any other files.",
+		},
+	},
+	"correction_scope_ok": {
+		{
+			Metric:    "correction_rate",
+			SubMetric: "scope",
+			Level:     "ok",
+			Headline:  "List what must stay unchanged",
+			Technique: "Even when corrections are infrequent, listing the untouchable parts up front avoids the walk-back entirely. One line — 'Do not modify X, Y, or Z' — gives the model a clear boundary and lets it focus on what you actually want changed.",
+			WeakEx:    "Add a cache to the session loader",
+			StrongEx:  "Add an in-memory cache to loadSession in session.go.\nDo not modify the Session struct, any callers, or test files.",
+		},
+		{
+			Metric:    "correction_rate",
+			SubMetric: "scope",
+			Level:     "ok",
+			Headline:  "Use 'Only X, nothing else'",
+			Technique: "The phrase 'only X, nothing else' is the most compact scope constraint. It fits in any prompt without adding bulk and leaves zero ambiguity about how far the change should spread.",
+			WeakEx:    "Update the README",
+			StrongEx:  "Update the Installation section in README.md only, nothing else.\nAdd a note about the --serve flag.",
+		},
+	},
+	"correction_format_warn": {
+		{
+			Metric:    "correction_rate",
+			SubMetric: "format",
+			Level:     "warn",
+			Headline:  "Specify output medium first",
+			Technique: "Format corrections mean the model returned prose when you wanted code, or a block when you wanted inline. Put the output medium in the very first sentence — before the task description. 'Show me as a code snippet: ...' is harder to misread than burying the format requirement at the end.",
+			WeakEx:    "How do I implement a retry loop in Go?",
+			StrongEx:  "Show me as a Go code snippet: a retry loop with exponential backoff.\nNo prose — code only. Use stdlib only.",
+		},
+		{
+			Metric:    "correction_rate",
+			SubMetric: "format",
+			Level:     "warn",
+			Headline:  "End with a format line",
+			Technique: "If you can't lead with the format, always close with one explicit format line. 'Return only the modified function, no explanation' at the end of any prompt prevents the most common format walk-back: the model returning a full file or a wall of prose around a small change.",
+			WeakEx:    "Update the error message in validateInput",
+			StrongEx:  "Update the error message in validateInput to include the field name.\nReturn only the modified function, no explanation.",
+		},
+	},
+	"correction_format_ok": {
+		{
+			Metric:    "correction_rate",
+			SubMetric: "format",
+			Level:     "ok",
+			Headline:  "Name the anti-format explicitly",
+			Technique: "Saying what you don't want is as effective as saying what you do. 'No prose', 'no comments', 'no markdown' each eliminate a whole class of unwanted output in one word. Add one anti-format line to any prompt where you've historically walked back the format.",
+			WeakEx:    "Summarize how the cache works",
+			StrongEx:  "Summarize how the cache works in 3 bullet points. No prose, no headers.",
+		},
+		{
+			Metric:    "correction_rate",
+			SubMetric: "format",
+			Level:     "ok",
+			Headline:  "Give a length budget",
+			Technique: "Length corrections happen when the model returns more (or less) than you expected. A length budget — 'one function', 'two sentences', 'under 20 lines' — sets a concrete ceiling and cuts overshoot before it starts.",
+			WeakEx:    "Write a helper to parse ISO dates",
+			StrongEx:  "Write a Go helper function to parse ISO 8601 dates.\nUnder 15 lines. No error wrapping, just return the zero time on failure.",
+		},
+	},
+	"correction_intent_warn": {
+		{
+			Metric:    "correction_rate",
+			SubMetric: "intent",
+			Level:     "warn",
+			Headline:  "Lead with the task, not the context",
+			Technique: "Intent corrections happen when the model misreads what you want because the context came first and buried the actual ask. Flip the structure: state the goal in the first sentence, then provide supporting context. 'Goal: X. Context: Y.' is almost never misread.",
+			WeakEx:    "I've been working on a parser and the tests keep failing because of how nil is handled. Can you help?",
+			StrongEx:  "Fix the nil pointer dereference in ParseFile at line 43.\nContext: the tests fail when input is an empty string; the nil check at line 38 is not reached.",
+		},
+		{
+			Metric:    "correction_rate",
+			SubMetric: "intent",
+			Level:     "warn",
+			Headline:  "State the goal, not just the action",
+			Technique: "Describing the action ('add logging') without the goal ('so I can trace request flow') leaves the model free to implement it in ways you don't expect. One goal sentence — 'so that X' — anchors the implementation and prevents the most common class of intent mismatch.",
+			WeakEx:    "Add logging to the HTTP handler",
+			StrongEx:  "Add request/response logging to the HTTP handler so I can trace latency per endpoint.\nLog to stderr. Use log/slog. Do not log request bodies.",
+		},
+	},
+	"correction_intent_ok": {
+		{
+			Metric:    "correction_rate",
+			SubMetric: "intent",
+			Level:     "ok",
+			Headline:  "Anchor with an example",
+			Technique: "When intent is subtle, a concrete example disambiguates faster than any description. 'Like X, but for Y' or 'Output should look like: [example]' eliminates the gap between what you mean and what the model infers.",
+			WeakEx:    "Reformat the output to be more readable",
+			StrongEx:  "Reformat the output to match this structure:\n  Model     Tokens    Cost\n  ------    ------    ----\n  sonnet    1.2M      $1.20\nAlign columns, right-justify numbers.",
+		},
+		{
+			Metric:    "correction_rate",
+			SubMetric: "intent",
+			Level:     "ok",
+			Headline:  "Use 'I want X, not Y'",
+			Technique: "The 'X, not Y' pattern is the most efficient way to pre-empt an intent mismatch. It takes one extra clause and rules out the exact wrong answer before the model can produce it.",
+			WeakEx:    "Explain the caching strategy",
+			StrongEx:  "Explain the caching strategy — I want a conceptual overview, not implementation details or code.",
+		},
+	},
 }
 
-// SelectCoachingTip returns the most relevant tip for the user's weakest clarity
-// metric, rotating weekly. Returns nil if all metrics are good or data is
-// insufficient.
-func SelectCoachingTip(r *ClarityReport) *CoachingTip {
+// SelectCoachingTips returns one tip per detected correction type when
+// correction_rate is the weakest metric, or a single tip for other metrics.
+// Tip selection is randomised so it changes on each call.
+// Returns nil when all metrics are good or data is insufficient.
+func SelectCoachingTips(r *ClarityReport) []*CoachingTip {
 	if r == nil || r.SessionCount < 2 {
 		return nil
 	}
 
 	o := r.Overall
 
-	// All three signals good → no coaching needed
 	ci := CorrectionRateInsight(o.CorrectionRate)
 	cli := ClarificationRateInsight(o.ClarificationRate)
 	fi := FrontLoadRatioInsight(o.FrontLoadRatio)
@@ -142,7 +263,6 @@ func SelectCoachingTip(r *ClarityReport) *CoachingTip {
 		return nil
 	}
 
-	// Normalized gap-to-good: how far each metric is from its "good" threshold
 	corrGap := o.CorrectionRate - 0.10
 	if corrGap < 0 {
 		corrGap = 0
@@ -156,7 +276,6 @@ func SelectCoachingTip(r *ClarityReport) *CoachingTip {
 		frontGap = 0
 	}
 
-	// Pick the weakest metric
 	var worstMetric, worstLevel string
 	if corrGap >= clarGap && corrGap >= frontGap {
 		worstMetric = "correction_rate"
@@ -169,26 +288,41 @@ func SelectCoachingTip(r *ClarityReport) *CoachingTip {
 		worstLevel = fi.Level
 	}
 
-	// "good" metrics don't get a coaching tip
 	if worstLevel == "good" {
 		return nil
 	}
 
-	key := worstMetric + "_" + worstLevel
-	tips, ok := tipBank[key]
-	if !ok || len(tips) == 0 {
-		// fallback: try warn tier
-		key = worstMetric + "_warn"
-		tips = tipBank[key]
-		if len(tips) == 0 {
-			return nil
+	// For correction_rate with detected types: one randomly-selected tip per type.
+	if worstMetric == "correction_rate" && len(o.CorrectionsByType) > 0 {
+		var result []*CoachingTip
+		// Fixed order so tips appear consistently: scope → format → intent
+		for _, ctype := range []string{"scope", "format", "intent"} {
+			if o.CorrectionsByType[ctype] == 0 {
+				continue
+			}
+			key := "correction_" + ctype + "_" + worstLevel
+			if bucket, ok := tipBank[key]; ok && len(bucket) > 0 {
+				t := bucket[rand.Intn(len(bucket))]
+				result = append(result, &t)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
 
-	// Rotate by ISO week so the tip changes each Monday
-	_, week := time.Now().ISOWeek()
-	tip := tips[week%len(tips)]
-	return &tip
+	// Generic single tip for this metric.
+	key := worstMetric + "_" + worstLevel
+	bucket, ok := tipBank[key]
+	if !ok || len(bucket) == 0 {
+		key = worstMetric + "_warn"
+		bucket = tipBank[key]
+		if len(bucket) == 0 {
+			return nil
+		}
+	}
+	t := bucket[rand.Intn(len(bucket))]
+	return []*CoachingTip{&t}
 }
 
 // computeWeekDelta returns the score change between the two most recent weeks.

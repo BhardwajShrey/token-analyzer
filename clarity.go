@@ -9,12 +9,73 @@ import (
 
 // ---- Signal lists ----
 
-var correctionSignals = []string{
-	"no,", "no.", "no!", "actually", "wait,", "wait.",
-	"that's not", "thats not", "not quite", "not what i",
-	"i meant", "wrong,", "wrong.", "instead,", "instead.",
-	"nevermind", "never mind", "scratch that", "forget that",
-	"let me rephrase", "not right",
+var walkbackSignals = []string{
+	"no,", "no.", "no!", "no no",
+	"actually", "actually,",
+	"wait,", "wait.", "wait wait",
+	"wrong,", "wrong.", "that's wrong", "thats wrong", "that was wrong",
+	"scratch that", "ignore that", "disregard that",
+	"nevermind", "never mind", "forget that", "forget it",
+	"instead,", "instead.",
+	"hold on", "hold on,",
+	"try again", "undo that", "go back", "start over",
+	"that's not right", "thats not right",
+	"revert", "revert that",
+}
+
+var scopePhrases = []string{
+	"don't change", "dont change",
+	"don't touch", "dont touch",
+	"don't modify", "dont modify",
+	"don't alter", "dont alter",
+	"don't update", "dont update",
+	"don't add", "dont add",
+	"don't remove", "dont remove",
+	"don't delete", "dont delete",
+	"don't refactor", "dont refactor",
+	"only change", "only modify", "only fix", "only in", "only the",
+	"just that one", "just this one", "just that file",
+	"without changing", "without modifying",
+	"preserve the", "keep it the same", "keep everything else",
+	"leave it", "leave that", "leave the",
+	"not the entire", "not everything",
+	"that file only", "this file only",
+}
+
+var formatPhrases = []string{
+	"as code", "in code", "not prose",
+	"as a function", "as a class", "as a method", "as a snippet",
+	"in json", "in yaml", "in xml", "in markdown",
+	"in typescript", "in python", "in go ", "in rust", "in javascript",
+	"as plain text", "as text",
+	"shorter", "simpler", "more concise", "less verbose",
+	"just the code", "code only",
+	"without explanation", "without comments", "no comments",
+	"don't explain", "dont explain", "no prose",
+	"as bullet", "as bullets", "in bullet", "as a list",
+	"in one line", "as one", "as a single",
+	"as markdown", "as a table", "in pseudocode",
+	"format it as", "formatted as", "format as",
+	"more readable",
+}
+
+var intentSignals = []string{
+	"that's not", "thats not",
+	"not quite", "not exactly",
+	"not what i", "not what i asked", "not what i want",
+	"not what i'm looking", "not looking for",
+	"i meant", "what i meant",
+	"i was asking", "i'm asking about",
+	"you misunderstood", "misunderstood",
+	"you missed", "you missed the point",
+	"you got it wrong", "you're off track", "youre off track",
+	"that's incorrect", "thats incorrect",
+	"that's the wrong", "thats the wrong",
+	"that's not it", "thats not it",
+	"completely wrong", "totally wrong",
+	"beside the point",
+	"let me rephrase", "let me clarify",
+	"not right",
 }
 
 var clarificationSignals = []string{
@@ -91,18 +152,34 @@ func isRealUserMessage(rec MessageRecord) bool {
 	return false
 }
 
-func hasCorrectionSignal(text string) bool {
-	preview := text
-	if len(preview) > 120 {
-		preview = preview[:120]
-	}
-	lower := strings.ToLower(preview)
-	for _, sig := range correctionSignals {
-		if strings.Contains(lower, sig) {
+func containsAny(s string, phrases []string) bool {
+	for _, p := range phrases {
+		if strings.Contains(s, p) {
 			return true
 		}
 	}
 	return false
+}
+
+func detectCorrectionType(text string) (string, bool) {
+	preview := strings.ToLower(text)
+	if len(preview) > 200 {
+		preview = preview[:200]
+	}
+	wb := containsAny(preview, walkbackSignals)
+	if wb && containsAny(preview, scopePhrases) {
+		return "scope", true
+	}
+	if wb && containsAny(preview, formatPhrases) {
+		return "format", true
+	}
+	if containsAny(preview, intentSignals) {
+		return "intent", true
+	}
+	if wb {
+		return "intent", true // fallback
+	}
+	return "", false
 }
 
 func hasClarificationSignal(text string) bool {
@@ -146,6 +223,7 @@ type sessionClarityState struct {
 	firstAssistantText string
 	hadClarification   bool
 	correctionCount    int
+	correctionCounts   map[string]int // "scope"->N, "format"->N, "intent"->N
 	startTime          time.Time
 }
 
@@ -176,7 +254,7 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 
 			state, ok := stateMap[sessionID]
 			if !ok {
-				state = &sessionClarityState{}
+				state = &sessionClarityState{correctionCounts: make(map[string]int)}
 				stateMap[sessionID] = state
 			}
 
@@ -188,8 +266,11 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 			if isRealUserMessage(rec) {
 				text := extractText(rec.Message.Content)
 				if text != "" {
-					if len(state.userMessages) >= 1 && hasCorrectionSignal(text) {
-						state.correctionCount++
+					if len(state.userMessages) >= 1 {
+						if ctype, ok := detectCorrectionType(text); ok {
+							state.correctionCounts[ctype]++
+							state.correctionCount++
+						}
 					}
 					state.userMessages = append(state.userMessages, text)
 				}
@@ -207,11 +288,12 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 
 	// Per-session metrics
 	type sessionMetrics struct {
-		corrRate  float64
-		clarRate  float64
-		frontLoad float64
-		score     float64
-		startTime time.Time
+		corrRate          float64
+		clarRate          float64
+		frontLoad         float64
+		score             float64
+		startTime         time.Time
+		correctionsByType map[string]float64
 	}
 
 	var allMetrics []sessionMetrics
@@ -247,12 +329,18 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 
 		score := 100 * (0.40*frontLoad + 0.35*(1-corrRate) + 0.25*(1-clarRate))
 
+		correctionsByType := make(map[string]float64)
+		for ctype, count := range state.correctionCounts {
+			correctionsByType[ctype] = float64(count) / float64(denom)
+		}
+
 		allMetrics = append(allMetrics, sessionMetrics{
-			corrRate:  corrRate,
-			clarRate:  clarRate,
-			frontLoad: frontLoad,
-			score:     score,
-			startTime: state.startTime,
+			corrRate:          corrRate,
+			clarRate:          clarRate,
+			frontLoad:         frontLoad,
+			score:             score,
+			startTime:         state.startTime,
+			correctionsByType: correctionsByType,
 		})
 	}
 
@@ -264,17 +352,25 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 	// Overall: mean across sessions
 	var sumCorr, sumClar, sumFront, sumScore float64
 	n := float64(sessionCount)
+	typeSums := map[string]float64{}
 	for _, m := range allMetrics {
 		sumCorr += m.corrRate
 		sumClar += m.clarRate
 		sumFront += m.frontLoad
 		sumScore += m.score
+		for ctype, rate := range m.correctionsByType {
+			typeSums[ctype] += rate
+		}
 	}
 	overall := ClarityMetrics{
 		CorrectionRate:    sumCorr / n,
 		ClarificationRate: sumClar / n,
 		FrontLoadRatio:    sumFront / n,
 		Score:             sumScore / n,
+	}
+	overall.CorrectionsByType = make(map[string]float64)
+	for ctype, sum := range typeSums {
+		overall.CorrectionsByType[ctype] = sum / n
 	}
 
 	// Weekly grouping
@@ -328,7 +424,7 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 		Weekly:       weekly,
 		SessionCount: sessionCount,
 	}
-	result.Tip = SelectCoachingTip(result)
+	result.Tips = SelectCoachingTips(result)
 	result.ScoreDelta = computeWeekDelta(result.Weekly)
 	return result
 }

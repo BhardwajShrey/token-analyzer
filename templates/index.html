@@ -510,6 +510,17 @@
       padding: 24px 0;
       font-size: 13px;
     }
+
+    .corr-breakdown { margin-top: 8px; }
+    .corr-breakdown-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 0 3px 12px;
+      border-left: 2px solid var(--border);
+      font-size: 12px; color: var(--text-muted);
+    }
+    .corr-breakdown-row:last-child { border-left-color: transparent; }
+    .corr-breakdown-label { text-transform: capitalize; }
+    .corr-breakdown-val { font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -878,32 +889,25 @@ const coachingMetricNames = {
   clarification_rate: 'Clarification Rate',
   front_load_ratio:   'Front-load Ratio',
 };
+const coachingSubMetricNames = {
+  scope:  'Scope corrections',
+  format: 'Format corrections',
+  intent: 'Intent corrections',
+};
 
-function renderCoaching(data) {
-  const section = document.getElementById('coaching-section');
-  const body    = document.getElementById('coaching-body');
-  const tip     = data.Clarity && data.Clarity.Tip;
-
-  if (!tip) {
-    section.style.display = 'none';
-    return;
-  }
-
-  section.style.display = '';
-
-  const o = data.Clarity.Overall;
+function renderOneTip(tip, o, delta) {
   const metricName = coachingMetricNames[tip.Metric] || tip.Metric;
-
   const metricValMap = {
     correction_rate:    o.CorrectionRate,
     clarification_rate: o.ClarificationRate,
     front_load_ratio:   o.FrontLoadRatio,
   };
-  const val = (metricValMap[tip.Metric] || 0) * 100;
+  const focusName = tip.SubMetric ? (coachingSubMetricNames[tip.SubMetric] || tip.SubMetric) : metricName;
+  const focusVal  = tip.SubMetric
+    ? ((o.CorrectionsByType && o.CorrectionsByType[tip.SubMetric] || 0) * 100)
+    : (metricValMap[tip.Metric] || 0) * 100;
 
-  // Week-over-week delta
   let deltaHtml = '';
-  const delta = data.Clarity.ScoreDelta;
   if (delta != null) {
     if (delta > 0.5) {
       deltaHtml = `<span class="coaching-delta up">↑ +${Math.round(delta)} pts from last week</span>`;
@@ -912,23 +916,20 @@ function renderCoaching(data) {
     }
   }
 
-  // Before/after examples: replace \n with <br>
-  const weakHtml   = escHtml(tip.WeakEx  || '').replace(/\n/g, '\n');
-  const strongHtml = escHtml(tip.StrongEx || '').replace(/\n/g, '\n');
+  const weakHtml   = escHtml(tip.WeakEx   || '');
+  const strongHtml = escHtml(tip.StrongEx || '');
 
-  body.innerHTML = `
+  return `
     <div class="coaching-focus">
       <span class="coaching-focus-label">Focus:</span>
-      <span class="coaching-focus-metric">${escHtml(metricName)}</span>
-      <span class="coaching-focus-val">${val.toFixed(1)}%</span>
+      <span class="coaching-focus-metric">${escHtml(focusName)}</span>
+      <span class="coaching-focus-val">${focusVal.toFixed(1)}%</span>
       ${insightBadge(tip.Level)}
       ${deltaHtml}
     </div>
-
     <div class="coaching-headline">${escHtml(tip.Headline)}</div>
     <hr class="coaching-rule">
     <p class="coaching-technique">${escHtml(tip.Technique)}</p>
-
     <div class="coaching-examples">
       <div class="coaching-ex weak">
         <div class="coaching-ex-label">✗ Weak</div>
@@ -938,8 +939,27 @@ function renderCoaching(data) {
         <div class="coaching-ex-label">✓ Strong</div>
         <div class="coaching-ex-text">${strongHtml}</div>
       </div>
-    </div>
-  `;
+    </div>`;
+}
+
+function renderCoaching(data) {
+  const section = document.getElementById('coaching-section');
+  const body    = document.getElementById('coaching-body');
+  const tips    = data.Clarity && data.Clarity.Tips;
+
+  if (!tips || tips.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+
+  const o     = data.Clarity.Overall;
+  const delta = data.Clarity.ScoreDelta;
+  const divider = '<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">';
+
+  // Delta shown only on the first tip
+  body.innerHTML = tips.map((tip, i) => renderOneTip(tip, o, i === 0 ? delta : null)).join(divider);
 }
 
 function escHtml(s) {
@@ -953,15 +973,32 @@ const metricTips = {
   front_load_ratio:   '% of your total prompt text that was in your first message. High = you front-loaded context; low = you trickled it in reactively.',
 };
 
-function clarityMetricRow(name, valPct, direction, ins, metricKey) {
+function clarityMetricRow(name, valPct, direction, ins, metricKey, breakdown) {
   const tip = metricTips[metricKey] || '';
+  let breakdownHtml = '';
+  if (breakdown) {
+    const entries = Object.entries(breakdown)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (entries.length > 0) {
+      breakdownHtml = `<div class="corr-breakdown">${
+        entries.map(([k, v], i) => `
+          <div class="corr-breakdown-row">
+            <span class="corr-breakdown-label">${k}</span>
+            <span class="corr-breakdown-val">${(v * 100).toFixed(1)}%</span>
+          </div>`
+        ).join('')
+      }</div>`;
+    }
+  }
   return `
-    <div class="clarity-metric">
+    <div class="clarity-metric" style="flex-wrap:wrap">
       <span class="clarity-metric-name" data-tip="${tip}">${name}</span>
       <span class="clarity-metric-val">${valPct.toFixed(1)}%</span>
       <span class="clarity-metric-dir">${direction}</span>
       ${insightBadge(ins.level)}
       <span class="clarity-metric-msg">"${ins.msg}"</span>
+      ${breakdownHtml ? `<div style="width:100%;padding-left:165px">${breakdownHtml}</div>` : ''}
     </div>`;
 }
 
@@ -1003,9 +1040,9 @@ function renderClarity(data) {
     </div>` : ''}
 
     <div style="margin-top:${hasWeekly ? 4 : 16}px">
-      ${clarityMetricRow('Correction Rate',    o.CorrectionRate    * 100, '↓ lower is better', ci,  'correction_rate')}
-      ${clarityMetricRow('Clarification Rate', o.ClarificationRate * 100, '↓ lower is better', cli, 'clarification_rate')}
-      ${clarityMetricRow('Front-load Ratio',   o.FrontLoadRatio    * 100, '↑ higher is better', fi,  'front_load_ratio')}
+      ${clarityMetricRow('Correction Rate',    o.CorrectionRate    * 100, '↓ lower is better', ci,  'correction_rate', o.CorrectionsByType || null)}
+      ${clarityMetricRow('Clarification Rate', o.ClarificationRate * 100, '↓ lower is better', cli, 'clarification_rate', null)}
+      ${clarityMetricRow('Front-load Ratio',   o.FrontLoadRatio    * 100, '↑ higher is better', fi,  'front_load_ratio', null)}
     </div>
   `;
 

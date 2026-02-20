@@ -149,6 +149,7 @@ type ClarityMetrics struct {
 	ClarificationRate float64
 	FrontLoadRatio    float64
 	Score             float64
+	CorrectionsByType map[string]float64 // "scope"->rate, "format"->rate, "intent"->rate
 }
 
 // WeeklyClarity holds clarity metrics for one ISO week (Monday-based).
@@ -166,7 +167,7 @@ type ClarityReport struct {
 	Overall      ClarityMetrics
 	Weekly       []WeeklyClarity // sorted asc by WeekStart
 	SessionCount int
-	Tip          *CoachingTip // nil if all metrics good or < 2 sessions
+	Tips         []*CoachingTip // nil if all metrics good or < 2 sessions
 	ScoreDelta   *float64     // last week minus previous week; nil if < 2 weeks
 }
 

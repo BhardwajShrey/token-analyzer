@@ -68,21 +68,44 @@ Score formula: `100 × (0.40 × front_load + 0.35 × (1 − correction_rate) + 0
 
 Weekly trends are tracked so you can see whether your prompting discipline is improving over time.
 
+## Correction Taxonomy
+
+Walk-backs are classified into three types so the coaching tip targets the specific habit driving your correction rate:
+
+| Type | What it means | Example signal |
+|---|---|---|
+| **Scope** | You changed more than you meant to | "don't touch", "only that file", "leave the interface" |
+| **Format** | The output medium or length was wrong | "just the code", "as JSON", "no explanation" |
+| **Intent** | The model misunderstood what was asked | "that's not what I meant", "you misunderstood", "let me rephrase" |
+
+Detection looks at the first 200 characters of each follow-up message. Scope and Format corrections require a walk-back signal (e.g. "actually", "scratch that") plus a type phrase in the same message. Intent signals fire standalone — they are inherently retroactive.
+
+When corrections are detected, the terminal report shows a type tree under Correction Rate:
+
+```
+  Correction Rate       28.0%  ↓ lower is better  [warn]
+    ├─ Scope    16.0%
+    ├─ Format   10.0%
+    └─ Intent    2.0%
+```
+
 ## Coaching Tips
 
-After measuring your clarity signals, the tool identifies your single weakest metric and surfaces a concrete, actionable tip — including a technique explanation and a realistic before/after prompt example. Tips rotate weekly (by ISO week number) so you always have something new to try.
+After measuring your clarity signals, the tool identifies your weakest metric and surfaces actionable tips — each with a technique explanation and a realistic before/after prompt example. Tips are randomised on every run so you see something different each time you open the dashboard.
 
-The weakest metric is chosen by normalized gap-to-good: whichever signal is furthest from its "good" threshold drives the tip. The tip is omitted entirely when all three signals are green.
+When correction rate is your weakest metric, you get **one tip per detected correction type** (scope, format, intent) rather than a single generic tip. Each tip is drawn from a type-specific bank targeting the exact habit causing that class of walk-back.
 
-Example tip (Front-load Ratio at 51%):
+The weakest metric is chosen by normalized gap-to-good: whichever signal is furthest from its "good" threshold drives the tip. Tips are omitted entirely when all three signals are green.
 
-> **Lead with the relevant code**
+Example tip (Scope corrections at 16%):
+
+> **Write a constraints block**
 >
-> If you are referencing code, paste it in the opening prompt rather than waiting for the model to ask.
+> Add a dedicated constraints block to every prompt: list files that are off-limits, interfaces that must stay intact, and folders that are read-only.
 >
-> ✗ `"Can you improve the performance here?"` → `[next turn] "Here's the hot path: ..."`
+> ✗ `"Refactor the parser"`
 >
-> ✓ `"Optimize this hot path for latency. [paste function] Reduce allocations. Keep the same external interface."`
+> ✓ `"Refactor parseConfig in config/parser.go to reduce nesting. Constraints: only modify config/parser.go. Do not touch config/types.go, any test files, or the public ParseConfig signature."`
 
 ## How it works
 

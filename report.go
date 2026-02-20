@@ -565,11 +565,14 @@ func printClaritySection(p *Printer, r *AggregatedReport) {
 
 	// Individual metric rows
 	printClarityMetricRow(p, "Correction Rate", cl.Overall.CorrectionRate, "↓ lower is better",
-		CorrectionRateInsight(cl.Overall.CorrectionRate), MetricDescriptions["correction_rate"])
+		CorrectionRateInsight(cl.Overall.CorrectionRate), MetricDescriptions["correction_rate"],
+		cl.Overall.CorrectionsByType)
 	printClarityMetricRow(p, "Clarification Rate", cl.Overall.ClarificationRate, "↓ lower is better",
-		ClarificationRateInsight(cl.Overall.ClarificationRate), MetricDescriptions["clarification_rate"])
+		ClarificationRateInsight(cl.Overall.ClarificationRate), MetricDescriptions["clarification_rate"],
+		nil)
 	printClarityMetricRow(p, "Front-load Ratio", cl.Overall.FrontLoadRatio, "↑ higher is better",
-		FrontLoadRatioInsight(cl.Overall.FrontLoadRatio), MetricDescriptions["front_load_ratio"])
+		FrontLoadRatioInsight(cl.Overall.FrontLoadRatio), MetricDescriptions["front_load_ratio"],
+		nil)
 }
 
 // ---- Coaching tip section ----
@@ -580,19 +583,31 @@ var metricDisplayNames = map[string]string{
 	"front_load_ratio":   "Front-load Ratio",
 }
 
+var subMetricDisplayNames = map[string]string{
+	"scope":  "Scope corrections",
+	"format": "Format corrections",
+	"intent": "Intent corrections",
+}
+
 func printCoachingSection(p *Printer, r *AggregatedReport) {
-	if r.Clarity == nil || r.Clarity.Tip == nil {
+	if r.Clarity == nil || len(r.Clarity.Tips) == 0 {
 		return
 	}
 
-	tip := r.Clarity.Tip
 	cl := r.Clarity
-
 	sectionHeader(p, "COACHING TIP")
 
-	// Focus line: metric name, current value, badge, optional week delta
-	displayName := metricDisplayNames[tip.Metric]
+	for i, tip := range cl.Tips {
+		if i > 0 {
+			p.println("  " + p.gray(strings.Repeat("·", 54)))
+			p.println("")
+		}
+		printOneTip(p, tip, cl, i == 0)
+	}
+}
 
+func printOneTip(p *Printer, tip *CoachingTip, cl *ClarityReport, showDelta bool) {
+	displayName := metricDisplayNames[tip.Metric]
 	var metricVal float64
 	switch tip.Metric {
 	case "correction_rate":
@@ -601,6 +616,14 @@ func printCoachingSection(p *Printer, r *AggregatedReport) {
 		metricVal = cl.Overall.ClarificationRate
 	case "front_load_ratio":
 		metricVal = cl.Overall.FrontLoadRatio
+	}
+	if tip.SubMetric != "" {
+		if sname, ok := subMetricDisplayNames[tip.SubMetric]; ok {
+			displayName = sname
+		}
+		if cl.Overall.CorrectionsByType != nil {
+			metricVal = cl.Overall.CorrectionsByType[tip.SubMetric]
+		}
 	}
 
 	var badge string
@@ -611,7 +634,7 @@ func printCoachingSection(p *Printer, r *AggregatedReport) {
 	}
 
 	var deltaStr string
-	if cl.ScoreDelta != nil {
+	if showDelta && cl.ScoreDelta != nil {
 		d := *cl.ScoreDelta
 		switch {
 		case d > 0.5:
@@ -624,18 +647,15 @@ func printCoachingSection(p *Printer, r *AggregatedReport) {
 	p.printf("  Focus: %-22s  %5.1f%%  %s%s\n", displayName, metricVal*100, badge, deltaStr)
 	p.println("")
 
-	// Headline + underline
 	p.printf("  %s\n", p.bold(tip.Headline))
 	p.printf("  %s\n", p.dim(strings.Repeat("─", len(tip.Headline))))
 
-	// Technique (word-wrapped)
 	wrapped := wordWrap(tip.Technique, 68)
 	for _, line := range strings.Split(wrapped, "\n") {
 		p.printf("  %s\n", line)
 	}
 	p.println("")
 
-	// Weak example
 	weakLines := strings.Split(tip.WeakEx, "\n")
 	p.printf("  %s  %s\n", p.red("✗"), p.dim(weakLines[0]))
 	for _, l := range weakLines[1:] {
@@ -643,7 +663,6 @@ func printCoachingSection(p *Printer, r *AggregatedReport) {
 	}
 	p.println("")
 
-	// Strong example
 	strongLines := strings.Split(tip.StrongEx, "\n")
 	p.printf("  %s  %s\n", p.green("✓"), strongLines[0])
 	for _, l := range strongLines[1:] {
@@ -652,7 +671,7 @@ func printCoachingSection(p *Printer, r *AggregatedReport) {
 	p.println("")
 }
 
-func printClarityMetricRow(p *Printer, name string, val float64, direction string, ins MetricInsight, description string) {
+func printClarityMetricRow(p *Printer, name string, val float64, direction string, ins MetricInsight, description string, subBreakdown map[string]float64) {
 	var badge string
 	switch ins.Level {
 	case "good":
@@ -665,5 +684,31 @@ func printClarityMetricRow(p *Printer, name string, val float64, direction strin
 	p.printf("  %-22s  %5.1f%%  %s  %s\n", name, val*100, p.gray(direction), badge)
 	p.printf("    %s\n", p.dim(`"`+ins.Oneliner+`"`))
 	p.printf("    %s\n", p.gray(description))
+
+	// Type breakdown tree
+	if len(subBreakdown) > 0 {
+		type entry struct {
+			name string
+			rate float64
+		}
+		var entries []entry
+		for ctype, rate := range subBreakdown {
+			if rate > 0 {
+				entries = append(entries, entry{ctype, rate})
+			}
+		}
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].rate > entries[j].rate
+		})
+		for i, e := range entries {
+			prefix := "├─"
+			if i == len(entries)-1 {
+				prefix = "└─"
+			}
+			label := strings.ToUpper(e.name[:1]) + e.name[1:]
+			p.printf("    %s %-10s %5.1f%%\n", prefix, label, e.rate*100)
+		}
+	}
+
 	p.println("")
 }
