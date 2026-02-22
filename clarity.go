@@ -419,10 +419,58 @@ func ComputeClarity(files []FileInfo, cutoff time.Time) *ClarityReport {
 		return weekly[i].WeekStart < weekly[j].WeekStart
 	})
 
+	// Hourly grouping (local time)
+	type hourAccum struct {
+		scoreSum float64
+		count    int
+	}
+	var hourMap [24]hourAccum
+	for _, m := range allMetrics {
+		if m.startTime.IsZero() {
+			continue
+		}
+		h := m.startTime.Local().Hour()
+		hourMap[h].scoreSum += m.score
+		hourMap[h].count++
+	}
+
+	hourlyBuckets := make([]HourlyClarityBucket, 24)
+	bestHour, worstHour := -1, -1
+	bestScore, worstScore := -1.0, 101.0
+	for h := 0; h < 24; h++ {
+		hourlyBuckets[h] = HourlyClarityBucket{Hour: h, Score: -1}
+		if hourMap[h].count > 0 {
+			avg := hourMap[h].scoreSum / float64(hourMap[h].count)
+			hourlyBuckets[h].Score = avg
+			hourlyBuckets[h].SessionCount = hourMap[h].count
+			if avg > bestScore {
+				bestScore = avg
+				bestHour = h
+			}
+			if avg < worstScore {
+				worstScore = avg
+				worstHour = h
+			}
+		}
+	}
+	// Only expose best/worst if at least 2 distinct hours have data
+	hoursWithData := 0
+	for _, b := range hourlyBuckets {
+		if b.Score >= 0 {
+			hoursWithData++
+		}
+	}
+	if hoursWithData < 2 {
+		bestHour, worstHour = -1, -1
+	}
+
 	result := &ClarityReport{
-		Overall:      overall,
-		Weekly:       weekly,
-		SessionCount: sessionCount,
+		Overall:       overall,
+		Weekly:        weekly,
+		SessionCount:  sessionCount,
+		HourlyBuckets: hourlyBuckets,
+		BestHour:      bestHour,
+		WorstHour:     worstHour,
 	}
 	result.Tips = SelectCoachingTips(result)
 	result.ScoreDelta = computeWeekDelta(result.Weekly)

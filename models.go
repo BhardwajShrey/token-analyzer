@@ -162,13 +162,24 @@ type WeeklyClarity struct {
 	SessionCount      int
 }
 
+// HourlyClarityBucket holds the average clarity score for one hour of day (local time).
+// Score is -1 if no sessions started in that hour.
+type HourlyClarityBucket struct {
+	Hour         int     // 0-23 local time
+	Score        float64 // avg clarity score; -1 if no sessions
+	SessionCount int
+}
+
 // ClarityReport is the top-level clarity result attached to AggregatedReport.
 type ClarityReport struct {
-	Overall      ClarityMetrics
-	Weekly       []WeeklyClarity // sorted asc by WeekStart
-	SessionCount int
-	Tips         []*CoachingTip // nil if all metrics good or < 2 sessions
-	ScoreDelta   *float64     // last week minus previous week; nil if < 2 weeks
+	Overall       ClarityMetrics
+	Weekly        []WeeklyClarity      // sorted asc by WeekStart
+	SessionCount  int
+	Tips          []*CoachingTip       // nil if all metrics good or < 2 sessions
+	ScoreDelta    *float64             // last week minus previous week; nil if < 2 weeks
+	HourlyBuckets []HourlyClarityBucket // 24 entries, ordered 0–23
+	BestHour      int                  // local hour with highest avg score; -1 if no data
+	WorstHour     int                  // local hour with lowest avg score; -1 if no data
 }
 
 // AggregatedReport is the top-level result from the aggregation phase.

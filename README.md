@@ -39,7 +39,7 @@ go build -o token-analyzer .
 - Top sessions with subagent overhead separated out
 - Daily trend sparkline (last 30 days)
 - Actionable insights (cache efficiency, verbose responses, subagent overhead, peak hour)
-- **Prompt Clarity section** with score, weekly trend, and per-metric good/ok/warn labels
+- **Prompt Clarity section** with score, weekly trend, time-of-day heatmap, and per-metric good/ok/warn labels
 - **Coaching Tip section** with a targeted technique and before/after prompt example
 
 **Web dashboard (`--serve`):**
@@ -50,7 +50,7 @@ go build -o token-analyzer .
 - Auto-refreshes every 30 seconds to reflect new sessions as you work
 - **Hover tooltips** on every metric label and table header explaining what each number means
 - **Good/ok/warn indicators** with one-liner explanations on summary cards
-- **Prompt Clarity section** with composite score, weekly line chart, and per-metric breakdown
+- **Prompt Clarity section** with composite score, weekly line chart, time-of-day heatmap, and per-metric breakdown
 - **Coaching Tip card** with side-by-side weak/strong prompt examples
 
 ## Prompt Clarity
@@ -67,6 +67,15 @@ The tool heuristically scores how well-specified your prompts are, across three 
 Score formula: `100 × (0.40 × front_load + 0.35 × (1 − correction_rate) + 0.25 × (1 − clarification_rate))`
 
 Weekly trends are tracked so you can see whether your prompting discipline is improving over time.
+
+### Time-of-Day Heatmap
+
+Sessions are also grouped by local hour of day (0–23). When at least 2 distinct hours have session data, the tool surfaces:
+
+- **Terminal**: a `Time-of-day` row showing your sharpest and sloppiest hour, e.g. `Sharpest 9am (85) · Sloppiest 11pm (42)`
+- **Web dashboard**: a color-coded 24-bar chart — green (score > 75), yellow (50–75), red (< 50), dimmed for hours with no sessions — plus the same summary line beneath it
+
+This is the most directly actionable clarity insight: if your worst hour is consistently late at night, that's a prompt discipline problem, not a skill one.
 
 ## Correction Taxonomy
 

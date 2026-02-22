@@ -116,6 +116,19 @@ func truncate(s string, n int) string {
 	return string(runes[:n-1]) + "…"
 }
 
+func fmtHourOfDay(h int) string {
+	switch {
+	case h == 0:
+		return "12am"
+	case h < 12:
+		return fmt.Sprintf("%dam", h)
+	case h == 12:
+		return "12pm"
+	default:
+		return fmt.Sprintf("%dpm", h-12)
+	}
+}
+
 func shortSession(id string) string {
 	if len(id) >= 8 {
 		return id[:8] + "…"
@@ -560,6 +573,20 @@ func printClaritySection(p *Printer, r *AggregatedReport) {
 			fmt.Fprintf(&sb, "W%d%c", i+1, ch)
 		}
 		p.printf("  %-22s  %s  %s\n", "Weekly trend", sb.String(), trendStr)
+		p.println("")
+	}
+
+	// Time-of-day row
+	if cl.BestHour >= 0 {
+		bestLabel := fmtHourOfDay(cl.BestHour)
+		worstLabel := fmtHourOfDay(cl.WorstHour)
+		bestScoreStr := fmt.Sprintf("%d", int(math.Round(cl.HourlyBuckets[cl.BestHour].Score)))
+		worstScoreStr := fmt.Sprintf("%d", int(math.Round(cl.HourlyBuckets[cl.WorstHour].Score)))
+		p.printf("  %-22s  %s · %s\n",
+			"Time-of-day",
+			p.green("Sharpest "+bestLabel+" ("+bestScoreStr+")"),
+			p.red("Sloppiest "+worstLabel+" ("+worstScoreStr+")"),
+		)
 		p.println("")
 	}
 

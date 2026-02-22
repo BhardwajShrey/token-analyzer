@@ -526,6 +526,24 @@
       font-size: 11px; color: var(--text-muted); opacity: 0.8;
       font-style: italic; padding: 0 0 5px 14px;
     }
+
+    /* ---- Hourly heatmap ---- */
+    .hourly-wrap {
+      margin: 16px 0;
+    }
+    .hourly-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .hourly-summary {
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .hourly-summary .best  { color: var(--green); font-weight: 600; }
+    .hourly-summary .worst { color: var(--red);   font-weight: 600; }
   </style>
 </head>
 <body>
@@ -1035,6 +1053,22 @@ function renderClarity(data) {
   const weekly = clarity.Weekly || [];
   const hasWeekly = weekly.length > 1;
 
+  const hourlyBuckets = clarity.HourlyBuckets || [];
+  const bestHour  = clarity.BestHour  != null ? clarity.BestHour  : -1;
+  const worstHour = clarity.WorstHour != null ? clarity.WorstHour : -1;
+  const hasHourly = bestHour >= 0 && hourlyBuckets.length === 24;
+
+  let hourlySummaryHtml = '';
+  if (hasHourly) {
+    const bestScore  = Math.round(hourlyBuckets[bestHour].Score);
+    const worstScore = Math.round(hourlyBuckets[worstHour].Score);
+    hourlySummaryHtml = `<div class="hourly-summary">
+      <span class="best">Sharpest at ${fmtHour(bestHour)} (${bestScore})</span>
+      &nbsp;·&nbsp;
+      <span class="worst">Sloppiest at ${fmtHour(worstHour)} (${worstScore})</span>
+    </div>`;
+  }
+
   body.innerHTML = `
     <div class="clarity-score-row">
       <span class="clarity-score-num ${si.level}">${Math.round(o.Score)}<span class="clarity-score-denom">/100</span></span>
@@ -1053,7 +1087,16 @@ function renderClarity(data) {
       </div>
     </div>` : ''}
 
-    <div style="margin-top:${hasWeekly ? 4 : 16}px">
+    ${hasHourly ? `
+    <div class="hourly-wrap">
+      <div class="hourly-label">Time-of-Day Clarity</div>
+      <div class="chart-container" style="height:140px">
+        <canvas id="clarity-hourly-chart"></canvas>
+      </div>
+      ${hourlySummaryHtml}
+    </div>` : ''}
+
+    <div style="margin-top:${hasWeekly || hasHourly ? 4 : 16}px">
       ${clarityMetricRow('Correction Rate',    o.CorrectionRate    * 100, '↓ lower is better', ci,  'correction_rate', o.CorrectionsByType || null)}
       ${clarityMetricRow('Clarification Rate', o.ClarificationRate * 100, '↓ lower is better', cli, 'clarification_rate', null)}
       ${clarityMetricRow('Front-load Ratio',   o.FrontLoadRatio    * 100, '↑ higher is better', fi,  'front_load_ratio', null)}
@@ -1095,11 +1138,68 @@ function renderClarity(data) {
     clarityWeeklyChart.destroy();
     clarityWeeklyChart = null;
   }
+
+  // Hourly heatmap chart
+  if (clarityHourlyChart) { clarityHourlyChart.destroy(); clarityHourlyChart = null; }
+  if (hasHourly) {
+    const hLabels = hourlyBuckets.map(b => fmtHour(b.Hour));
+    const hScores = hourlyBuckets.map(b => b.Score >= 0 ? Math.round(b.Score) : null);
+    const hColors = hourlyBuckets.map(b => {
+      if (b.Score < 0) return 'rgba(255,255,255,0.08)';
+      if (b.Score > 75) return 'rgba(34,197,94,0.75)';
+      if (b.Score >= 50) return 'rgba(234,179,8,0.75)';
+      return 'rgba(239,68,68,0.75)';
+    });
+    const hTooltip = hourlyBuckets.map(b =>
+      b.Score >= 0
+        ? `${fmtHour(b.Hour)} — Score: ${Math.round(b.Score)} (${b.SessionCount} session${b.SessionCount !== 1 ? 's' : ''})`
+        : `${fmtHour(b.Hour)} — No sessions`
+    );
+    const hCtx = document.getElementById('clarity-hourly-chart').getContext('2d');
+    clarityHourlyChart = new Chart(hCtx, {
+      type: 'bar',
+      data: {
+        labels: hLabels,
+        datasets: [{
+          label: 'Clarity Score',
+          data: hScores,
+          backgroundColor: hColors,
+          borderRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: () => '',
+              label: ctx => hTooltip[ctx.dataIndex],
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#8892a4', font: { size: 10 }, maxRotation: 0 }, grid: { color: '#2d3148' } },
+          y: { min: 0, max: 100, ticks: { color: '#8892a4', stepSize: 25 }, grid: { color: '#2d3148' } }
+        }
+      }
+    });
+  }
+}
+
+// ---- Hour formatting ----
+function fmtHour(h) {
+  if (h === 0) return '12am';
+  if (h < 12) return h + 'am';
+  if (h === 12) return '12pm';
+  return (h - 12) + 'pm';
 }
 
 // ---- Live update ----
 let dailyChart = null;
 let clarityWeeklyChart = null;
+let clarityHourlyChart = null;
 const POLL_INTERVAL_MS = 30_000;
 
 function setLiveStatus(ok) {
